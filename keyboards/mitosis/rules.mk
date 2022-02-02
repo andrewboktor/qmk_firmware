@@ -18,4 +18,4 @@ NKRO_ENABLE = yes           # Enable N-Key Rollover
 UNICODE_ENABLE = yes 		# Unicode
 
 # # project specific files
-SRC += matrix.c serial_uart.c
+SRC += matrix.c arf24.c spi_master.c

@@ -26,7 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "util.h"
 #include "matrix.h"
 #include "timer.h"
-#include "protocol/serial.h"
+#include "arf24.h"
 
 #if (MATRIX_COLS <= 8)
 #    define print_matrix_header()  print("\nr/c 01234567\n")
@@ -76,48 +76,36 @@ inline
 uint8_t matrix_cols(void) {
     return MATRIX_COLS;
 }
-
+uint8_t addresses[][6] = {"1Node", "2Node"};
 void matrix_init(void) {
-
     matrix_init_quantum();
-    serial_init();
+    wait_ms(2000);
+    println("Hello World! I am GOD");
+    nrf_init(B5, B6);
+    openReadingPipe(1, addresses[0]);
+    openReadingPipe(2, addresses[1]);
+    startListening();
+    println("DONE INIT");
 }
 
 uint8_t matrix_scan(void)
 {
-    uint32_t timeout = 0;
-
-    //the s character requests the RF slave to send the matrix
-    SERIAL_UART_DATA = 's';
-
-    //trust the external keystates entirely, erase the last data
-    uint8_t uart_data[11] = {0};
-
-    //there are 10 bytes corresponding to 10 columns, and an end byte
-    for (uint8_t i = 0; i < 11; i++) {
-        //wait for the serial data, timeout if it's been too long
-        //this only happened in testing with a loose wire, but does no
-        //harm to leave it in here
-        while(!SERIAL_UART_RXD_PRESENT){
-            timeout++;
-            if (timeout > 10000){
-                break;
+    // println("Matrix Scan");
+    uint8_t pipe = qmkrf_available();
+    uint8_t extraShift=0;
+    if(pipe <= 5) {
+        if(pipe == 2) extraShift = 5;
+        uint8_t text[32];
+        qmkrf_read(&text[0], 32); //Read all 32 and throw away the rest
+        for(int i=0; i<5; i++) {
+            uint8_t curr = text[i];
+            for(int j=0; j<5; j++) {
+                matrix[j] = (matrix[j]&~(1<<(i+extraShift))) | ((curr&1)<<(i+extraShift));
+                curr >>=1;
             }
         }
-        uart_data[i] = SERIAL_UART_DATA;
+        matrix_print();
     }
-
-    //check for the end packet, the key state bytes use the LSBs, so 0xE0
-    //will only show up here if the correct bytes were recieved
-    if (uart_data[10] == 0xE0)
-    {
-        //shifting and transferring the keystates to the QMK matrix variable
-        for (uint8_t i = 0; i < MATRIX_ROWS; i++) {
-            matrix[i] = (uint16_t) uart_data[i*2] | (uint16_t) uart_data[i*2+1] << 5;
-        }
-    }
-
-
     matrix_scan_quantum();
     return 1;
 }
